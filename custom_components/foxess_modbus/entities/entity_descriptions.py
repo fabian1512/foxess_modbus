@@ -35,7 +35,7 @@ from .remote_control_description import REMOTE_CONTROL_DESCRIPTION
 from .validation import Min
 from .validation import Range
 
-# hass type hints are incorrect, and mypy does not see inherited dataclass properties on the EntityDescriptions
+# hass type hints are messed up, and mypy doesn't see inherited dataclass properties on the EntityDescriptions
 # mypy: disable-error-code="call-arg"
 
 
@@ -149,7 +149,7 @@ def _pv_entities() -> Iterable[EntityFactory]:
             native_unit_of_measurement="A",
             scale=scale,
             round_to=1,
-            # This can be slightly negative
+            # This can a small amount negative
             post_process=lambda x: max(x, 0),
             validate=[Range(0, 100)],
         )
@@ -220,7 +220,7 @@ def _pv_entities() -> Iterable[EntityFactory]:
             ModbusAddressesSpec(
                 holding=[31002], models=Inv.H1_G1 | Inv.H1_LAN | Inv.KH_PRE133 | (Inv.H3_SET & ~Inv.H3_SMART)
             ),
-            # This is technically a 32-bit register on the G2, but it doesn't appear to actually write the upper word,
+            # This is techincally a 32-bit register on the G2, but it doesn't appear to actually write the upper word,
             # which means that negative values are represented incorrectly (as 0x0000FFFF etc)
             ModbusAddressesSpec(holding=[39280], models=Inv.H1_G2_SET),
             ModbusAddressesSpec(holding=[39280, 39279], models=Inv.KH_133 | Inv.H3_PRO_SET | Inv.H3_SMART),
@@ -275,7 +275,7 @@ def _pv_entities() -> Iterable[EntityFactory]:
             ModbusAddressesSpec(
                 holding=[31005], models=Inv.H1_G1 | Inv.H1_LAN | Inv.KH_PRE133 | (Inv.H3_SET & ~Inv.H3_SMART)
             ),
-            # This is technically a 32-bit register on the G2, but it doesn't appear to actually write the upper word,
+            # This is techincally a 32-bit register on the G2, but it doesn't appear to actually write the upper word,
             # which means that negative values are represented incorrectly (as 0x0000FFFF etc)
             ModbusAddressesSpec(holding=[39282], models=Inv.H1_G2_SET),
             ModbusAddressesSpec(holding=[39282, 39281], models=Inv.KH_133 | Inv.H3_PRO_SET | Inv.H3_SMART),
