@@ -1,3 +1,4 @@
+#test-tag
 """Defines the different inverter models and connection types"""
 
 import functools
