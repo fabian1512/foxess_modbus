@@ -43,7 +43,7 @@ from .vendor.pymodbus import ModbusExceptions
 
 _LOGGER = logging.getLogger(__name__)
 
-# How many failed polls before we mark sensors as Unavailable
+# Number of failed polls before sensors are marked as Unavailable
 _NUM_FAILED_POLLS_FOR_DISCONNECTION = 5
 
 _MODEL_START_ADDRESS = 30000
@@ -83,7 +83,7 @@ class InvalidRegisterRanges:
         return len(self._ranges) == 0
 
     def add(self, register: int) -> None:
-        # Does it fall in any other ranges, or sit at the end of any range?
+        # Check if the register falls in any other ranges, or sits at the end of any range
         for x in self._ranges:
             if register >= x.start and register < (x.start + x.count):
                 # Already covered
@@ -111,7 +111,7 @@ def _acquire_nonblocking(lock: threading.Lock) -> Iterator[bool]:
 
 
 class ModbusController(EntityController, UnloadController):
-    """Class to manage forecast retrieval"""
+    """Class to manage forecast retrieval and Modbus polling"""
 
     def __init__(
         self,
@@ -123,7 +123,7 @@ class ModbusController(EntityController, UnloadController):
         poll_rate: int,
         max_read: int,
     ) -> None:
-        """Init"""
+        """Initialize the ModbusController"""
         self._hass = hass
         self._update_listeners: set[ModbusControllerEntity] = set()
         self._data: dict[int, RegisterValue] = {}
@@ -145,7 +145,7 @@ class ModbusController(EntityController, UnloadController):
             self.inverter_details[INVERTER_MODEL]
         )
 
-        # Setze das Inv-Flag korrekt
+        # Set the Inv flag correctly
         version_from_config = self._inverter_details.get("inverter_version")
         inverter_version = None
         if version_from_config is not None:
@@ -154,8 +154,8 @@ class ModbusController(EntityController, UnloadController):
             inverter_version = Version.parse(version_from_config)
         self._inv = self._connection_type_profile.get_inv_for_version(inverter_version)
         _LOGGER.debug(
-            "[foxess_modbus] Initialisiere ModbusController: Modell=%s, Inv=%s",
-            self.inverter_details.get(INVERTER_MODEL, "<unbekannt>"),
+            "[foxess_modbus] Initializing ModbusController: Model=%s, Inv=%s",
+            self.inverter_details.get(INVERTER_MODEL, "<unknown>"),
             self._inv,
         )
 
@@ -190,7 +190,7 @@ class ModbusController(EntityController, UnloadController):
 
     @property
     def is_connected(self) -> bool:
-        # Only tell things we're not connected if we're actually disconnected
+        # Only report not connected if actually disconnected
         return self._connection_state == ConnectionState.INITIAL or self._connection_state == ConnectionState.CONNECTED
 
     @property
@@ -210,9 +210,8 @@ class ModbusController(EntityController, UnloadController):
         return self._inverter_details
 
     def read(self, address: int | list[int], *, signed: bool) -> int | None:
-        # There can be a delay between writing a register, and actually reading that value back (presumably the delay
-        # is on the inverter somewhere). If we've recently written a value, use that value, rather than the latest-read
-        # value
+        # There can be a delay between writing a register and reading its value back. If a value was recently written,
+        # use that value instead of the latest-read value.
         now = time.monotonic()
 
         def _read_value(address: int) -> int | None:
@@ -249,7 +248,7 @@ class ModbusController(EntityController, UnloadController):
         return value
 
     async def read_registers(self, start_address: int, num_registers: int, register_type: RegisterType) -> list[int]:
-        """Read one of more registers, used by the read_registers_service"""
+        """Read one or more registers, used by the read_registers_service"""
         return await self._client.read_registers(start_address, num_registers, register_type, self._slave)
 
     async def write_register(self, address: int, value: int) -> None:
@@ -294,7 +293,7 @@ class ModbusController(EntityController, UnloadController):
 
     async def _refresh(self, _time: datetime) -> None:
         """Refresh modbus data"""
-        # Make sure that we don't do two refreshes at the same time, if one is too slow
+        # Ensure that two refreshes don't occur simultaneously if one is too slow
         with _acquire_nonblocking(self._refresh_lock) as acquired:
             if not acquired:
                 _LOGGER.warning(
@@ -436,22 +435,22 @@ class ModbusController(EntityController, UnloadController):
     def _create_read_ranges(self, max_read: int, is_initial_connection: bool) -> Iterable[tuple[int, int]]:
         """
         Generates a set of read ranges to cover the addresses of all registers on this inverter,
-        respecting the maxumum number of registers to read at a time
+        respecting the maximum number of registers to read at a time.
 
         :returns: Sequence of tuples of (start_address, num_registers_to_read)
         """
         _LOGGER.debug(
-            "[foxess_modbus] _create_read_ranges: Modell=%s Inv=%s, ConnectionTypeProfile=%s, "
+            "[foxess_modbus] _create_read_ranges: Model=%s Inv=%s, ConnectionTypeProfile=%s, "
             "max_read=%s, is_initial_connection=%s",
-            self.inverter_details.get(INVERTER_MODEL, "<unbekannt>"),
-            getattr(self, "_inv", "<unbekannt>"),
-            getattr(self, "_connection_type_profile", "<unbekannt>"),
+            self.inverter_details.get(INVERTER_MODEL, "<unknown>"),
+            getattr(self, "_inv", "<unknown>"),
+            getattr(self, "_connection_type_profile", "<unknown>"),
             max_read,
             is_initial_connection,
         )
         start_address: int | None = None
         read_size = 0
-        planned_reads = []  # Debug: Sammle geplante Reads
+        planned_reads: list[tuple[int, int]] = []  # Collect planned reads for debug logging
         for address, register_value in sorted(self._data.items()):
             if register_value.poll_type == RegisterPollType.ON_CONNECTION and not is_initial_connection:
                 continue
@@ -477,13 +476,14 @@ class ModbusController(EntityController, UnloadController):
                 start_address, read_size = address, 1
             if read_size == max_read:
                 planned_reads.append((start_address, read_size))
-                yield (start_address, read_size)  # type: ignore
+                yield (start_address, read_size)
                 start_address, read_size = None, 0
         if start_address is not None:
             planned_reads.append((start_address, read_size))
+            # Only yield if start_address is not None (type checker safety)
             yield (start_address, read_size)
         _LOGGER.debug(
-            "[foxess_modbus] Geplante Register-Reads: %s",
+            "[foxess_modbus] Planned register reads: %s",
             planned_reads,
         )
 
@@ -528,7 +528,7 @@ class ModbusController(EntityController, UnloadController):
                     ex.response,
                 )
 
-                # Right, at least one of this range failed. Find out what it wasn't happy with, and read the others
+                # At least one register in this range failed. Identify the problematic registers and read the others.
                 for i in range(num_reads):
                     address = start_address + i
 
@@ -654,7 +654,7 @@ class ModbusController(EntityController, UnloadController):
                     capacity = model.inverter_capacity(full_model)
                     _LOGGER.info("Autodetected inverter as '%s' (%s, %sW)", model.model, full_model, capacity)
                     _LOGGER.debug(
-                        "[foxess_modbus] Autodetect: Modell erkannt: %s, Pattern: %s, FullModel: %s",
+                        "[foxess_modbus] Autodetect: Model detected: %s, Pattern: %s, FullModel: %s",
                         model.model,
                         model.model_pattern,
                         full_model,
