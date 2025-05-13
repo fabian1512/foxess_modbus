@@ -1,4 +1,3 @@
-#test-tag
 """Defines the different inverter models and connection types"""
 
 import functools
@@ -326,8 +325,15 @@ _INVERTER_PROFILES_LIST = [
         versions={Version(1, 33): Inv.KH_PRE133, None: Inv.KH_133},
         special_registers=KH_REGISTERS,
     ),
+    # H3-Smart: explizites Profil für H3-Smart, damit die Register korrekt zugeordnet werden
+    InverterModelProfile(InverterModel.H3_SMART, r"^H3-([\d\.]+)-Smart").add_connection_type(
+        ConnectionType.AUX,
+        RegisterType.HOLDING,
+        versions={None: Inv.H3_SMART},
+        special_registers=H3_SMART_REGISTERS,
+    ),
     # The H3 seems to use holding registers for everything
-    InverterModelProfile(InverterModel.H3, r"^H3-([\d\.]+)").add_connection_type(
+    InverterModelProfile(InverterModel.H3, r"^H3-([\d\.]+)$").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
         versions={Version(1, 80): Inv.H3_PRE180, None: Inv.H3_180},
