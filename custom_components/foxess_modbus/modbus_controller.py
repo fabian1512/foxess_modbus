@@ -145,6 +145,20 @@ class ModbusController(EntityController, UnloadController):
             self.inverter_details[INVERTER_MODEL]
         )
 
+        # Setze das Inv-Flag korrekt
+        version_from_config = self._inverter_details.get("inverter_version")
+        inverter_version = None
+        if version_from_config is not None:
+            from .inverter_profiles import Version
+
+            inverter_version = Version.parse(version_from_config)
+        self._inv = self._connection_type_profile.get_inv_for_version(inverter_version)
+        _LOGGER.debug(
+            "[foxess_modbus] Initialisiere ModbusController: Modell=%s, Inv=%s",
+            self.inverter_details.get(INVERTER_MODEL, "<unbekannt>"),
+            self._inv,
+        )
+
         # Setup mixins
         EntityController.__init__(self)
         UnloadController.__init__(self)
@@ -426,61 +440,52 @@ class ModbusController(EntityController, UnloadController):
 
         :returns: Sequence of tuples of (start_address, num_registers_to_read)
         """
-
-        # The idea here is that read operations are expensive (there seems to be a large round-trip time at least
-        # with the W610), but reading additional unneeded registers is relatively cheap (probably < 1ms).
-
-        # To give some intuition, here are some examples of the groupings we want to achieve, assuming max_read = 5
-        # 1,2 / 4,5 -> 1,2,3,4,5 (i.e. to read the registers 1, 2, 4 and 5, we'll do a single read spanning 1-5)
-        # 1,2 / 5,6,7,8 -> 1,2 / 5,6,7,8
-        # 1,2 / 5,6,7,8,9 -> 1,2 / 5,6,7,8,9
-        # 1,2 / 5,6,7,8,9,10 -> 1,2,3,4,5 / 6,7,8,9,10
-        # 1,2,3 / 5,6,7 / 9,10 -> 1,2,3,4,5 / 6,7,8,9,10
-
-        # The problem as a whole looks like it's NP-hard (although I can't find a name for it).
-        # We're therefore going to use a fairly simple algorithm which just makes each read as large as it can be.
-
+        _LOGGER.debug(
+            "[foxess_modbus] _create_read_ranges: Modell=%s Inv=%s, ConnectionTypeProfile=%s, "
+            "max_read=%s, is_initial_connection=%s",
+            self.inverter_details.get(INVERTER_MODEL, "<unbekannt>"),
+            getattr(self, "_inv", "<unbekannt>"),
+            getattr(self, "_connection_type_profile", "<unbekannt>"),
+            max_read,
+            is_initial_connection,
+        )
         start_address: int | None = None
         read_size = 0
-        # TODO: Do we want to cache the result of this?
+        planned_reads = []  # Debug: Sammle geplante Reads
         for address, register_value in sorted(self._data.items()):
             if register_value.poll_type == RegisterPollType.ON_CONNECTION and not is_initial_connection:
                 continue
-
-            # Have we found that we can't read this register? Don't try again.
             if address in self._detected_invalid_ranges:
                 continue
-
-            # This register must be read in a single individual read. Yield any ranges we've found so far,
-            # and yield just this register on its own
             if self._connection_type_profile.is_individual_read(address):
                 if start_address is not None:
+                    planned_reads.append((start_address, read_size))
                     yield (start_address, read_size)
                     start_address, read_size = None, 0
+                planned_reads.append((address, 1))
                 yield (address, 1)
             elif start_address is None:
                 start_address, read_size = address, 1
-            # If we're just increasing the previous read size by 1, then don't test whether we're extending
-            # the read over an invalid range (as we assume that registers we're reading to read won't be
-            # inside invalid ranges, tested in __init__). This also assumes that read_size != max_read here.
             elif address == start_address + 1 or (
                 address <= start_address + max_read - 1
                 and not self._connection_type_profile.overlaps_invalid_range(start_address, address - 1)
             ):
-                # There's a previous read which we can extend
                 read_size = address - start_address + 1
             else:
-                # There's a previous read, and we can't extend it to cover this address
+                planned_reads.append((start_address, read_size))
                 yield (start_address, read_size)
                 start_address, read_size = address, 1
-
             if read_size == max_read:
-                # (can't get here if start_address is None, as read_size would be 0
+                planned_reads.append((start_address, read_size))
                 yield (start_address, read_size)  # type: ignore
                 start_address, read_size = None, 0
-
         if start_address is not None:
+            planned_reads.append((start_address, read_size))
             yield (start_address, read_size)
+        _LOGGER.debug(
+            "[foxess_modbus] Geplante Register-Reads: %s",
+            planned_reads,
+        )
 
     # List of (start address, [read values starting at that address])
     async def _read_all_registers(self) -> list[tuple[int, Iterable[int | None]]]:
@@ -648,6 +653,12 @@ class ModbusController(EntityController, UnloadController):
                     # Make sure that we can parse the capacity out
                     capacity = model.inverter_capacity(full_model)
                     _LOGGER.info("Autodetected inverter as '%s' (%s, %sW)", model.model, full_model, capacity)
+                    _LOGGER.debug(
+                        "[foxess_modbus] Autodetect: Modell erkannt: %s, Pattern: %s, FullModel: %s",
+                        model.model,
+                        model.model_pattern,
+                        full_model,
+                    )
                     return model.model, full_model
 
             # We've read the model type, but been unable to match it against a supported model
