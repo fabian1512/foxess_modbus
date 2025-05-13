@@ -1,4 +1,4 @@
-"""Defines RegisterType"""  # noqa: A005
+"""Defines RegisterType"""
 
 from enum import Enum
 from enum import Flag
@@ -57,6 +57,7 @@ class InverterModel(StrEnum):
     ONE_KOMMA_FIVE = "1KOMMA5"
 
     H3_PRO = "H3_PRO"
+    H3_SMART = "H3_SMART"
 
 
 class Inv(Flag):
