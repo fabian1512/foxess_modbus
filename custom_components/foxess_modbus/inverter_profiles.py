@@ -77,25 +77,24 @@ class SpecialRegisterConfig:
         self.individual_read_register_ranges = individual_read_register_ranges
 
 
-# H1_AC1_REGISTERS: Registers that are invalid for H1 AC1 inverters.
 H1_AC1_REGISTERS = SpecialRegisterConfig(invalid_register_ranges=[(11096, 39999)])
-# H3_REGISTERS: See https://github.com/nathanmarlor/foxess_modbus/discussions/503
+# See https://github.com/nathanmarlor/foxess_modbus/discussions/503
 H3_REGISTERS = SpecialRegisterConfig(
     invalid_register_ranges=[(41001, 41006), (41012, 41013), (41015, 41015)],
     individual_read_register_ranges=[(41000, 41999)],
 )
-# H3_SMART_REGISTERS: See https://github.com/nathanmarlor/foxess_modbus/discussions/792
-# All the 410xx registers are not specified within the document version V1.05.03.00
+# See https://github.com/nathanmarlor/foxess_modbus/discussions/792
+# All the 410xx register are not specified within the document version V1.05.03.00
 H3_SMART_REGISTERS = SpecialRegisterConfig(
     invalid_register_ranges=[(41001, 41006), (41012, 41013), (41015, 41015)],
     individual_read_register_ranges=[(37609, 37620), (37632, 37636)],
 )
-# KH_REGISTERS: See https://github.com/nathanmarlor/foxess_modbus/pull/512
+# See https://github.com/nathanmarlor/foxess_modbus/pull/512
 KH_REGISTERS = SpecialRegisterConfig(
     invalid_register_ranges=[(41001, 41006), (41012, 41012), (41019, 43999), (31055, 31999)],
     individual_read_register_ranges=[(41000, 41999)],
 )
-# H1_G2_REGISTERS: See https://github.com/nathanmarlor/foxess_modbus/discussions/553
+# See https://github.com/nathanmarlor/foxess_modbus/discussions/553
 H1_G2_REGISTERS = SpecialRegisterConfig(
     individual_read_register_ranges=[(41000, 41999)],
 )
@@ -129,7 +128,7 @@ CapacityParser.H1 = CapacityParser(capacity_map={"3.7": 3680}, fallback_to_kw=Tr
 
 
 class InverterModelConnectionTypeProfile:
-    """Describes the capabilities of an inverter when connected over a particular interface"""
+    """Describes the capabilities of an inverter when connected to over a particular interface"""
 
     def __init__(
         self,
@@ -156,7 +155,7 @@ class InverterModelConnectionTypeProfile:
     def get_inv_for_version(self, version: Version | None) -> Inv:
         # Used for pytests
 
-        # Note: self._versions is a map of maximum supported manager version (or None to support the max
+        # Remember that self._versions is a map of maximum supported manager version (or None to support the max
         # firmware version) -> Inv for that version
         if version is None:
             return self.versions[None]
@@ -251,9 +250,9 @@ class InverterModelProfile:
         return capacity
 
 
-# NOTE: If the inverter supports LAN and AUX identically, just specify AUX
+# NOTE: If the inverter support LAN and AUX identically, just specify AUX
 _INVERTER_PROFILES_LIST = [
-    # Example: H1-5.0-E-G2. Must appear before H1_G1.
+    # E.g. H1-5.0-E-G2. Has to appear before H1_G1.
     InverterModelProfile(
         InverterModel.H1_G2, r"^H1-([\d\.]+)-E-G2", capacity_parser=CapacityParser.H1
     ).add_connection_type(
@@ -275,7 +274,7 @@ _INVERTER_PROFILES_LIST = [
         RegisterType.HOLDING,
         versions={None: Inv.H1_LAN},
     ),
-    # Example: AC1-5.0-E-G2. Must appear before AC1 G1. See https://github.com/nathanmarlor/foxess_modbus/discussions/715
+    # AC1-5.0-E-G2. Has to appear before AC1 G1 see https://github.com/nathanmarlor/foxess_modbus/discussions/715
     InverterModelProfile(
         InverterModel.AC1_G2, r"^AC1-([\d\.]+)-E-G2", capacity_parser=CapacityParser.H1
     ).add_connection_type(
@@ -316,26 +315,24 @@ _INVERTER_PROFILES_LIST = [
         versions={None: Inv.H1_G1},
         special_registers=H1_AC1_REGISTERS,
     ),
-    # The KH does not have a LAN port. It supports both input and holding registers over RS485.
-    # Some models start with KH-, but some are just e.g. KH10.5.
-    # TODO: Inv.KH_PRE119 requires RegisterType.INPUT, but currently we do not support using different register types
-    # for different versions (it is determined solely by the connection type, which is just based on the old H1).
+    # The KH doesn't have a LAN port. It supports both input and holding over RS485
+    # Some models start with KH-, but some are just e.g. KH10.5
+    # TODO: Inv.KH_PRE119 requires RegisterType.INPUT, but we don't currently support using different register types
+    # for different versions (it's determined solely by the connection type, which is just based on the old H1)
     InverterModelProfile(InverterModel.KH, r"^KH([\d\.]+)").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
         versions={Version(1, 33): Inv.KH_PRE133, None: Inv.KH_133},
         special_registers=KH_REGISTERS,
     ),
-    # H3-Smart: explicit profile for H3-Smart to ensure correct register mapping.
-    InverterModelProfile(
-        InverterModel.H3_SMART, r"^H3-(5\.0|6\.0|8\.0|9\.9|10\.0|12\.0|15\.0)-Smart$"
-    ).add_connection_type(
+    # H3-Smart: explizites Profil für H3-Smart, damit die Register korrekt zugeordnet werden
+    InverterModelProfile(InverterModel.H3_SMART, r"^H3-([\d\.]+)-Smart").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
         versions={None: Inv.H3_SMART},
         special_registers=H3_SMART_REGISTERS,
     ),
-    # The H3 uses holding registers for all operations.
+    # The H3 seems to use holding registers for everything
     InverterModelProfile(InverterModel.H3, r"^H3-([\d\.]+)$").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
@@ -358,7 +355,7 @@ _INVERTER_PROFILES_LIST = [
     # Kuara 8.0-3-H: H3-8.0-E
     # Kuara 10.0-3-H: H3-10.0-E
     # Kuara 12.0-3-H: H3-12.0-E
-    # I haven't seen any indication that these support a direct LAN connection.
+    # I haven't seen any indication that these support a direct LAN connection
     InverterModelProfile(InverterModel.KUARA_H3, r"^Kuara ([\d\.]+)-3-H$").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
@@ -367,7 +364,7 @@ _INVERTER_PROFILES_LIST = [
     ),
     # Sonnenkraft:
     # SK-HWR-8: H3-8.0-E
-    # (presumably there are other sizes also).
+    # (presumably there are other sizes also)
     InverterModelProfile(InverterModel.SK_HWR, r"^SK-HWR-([\d\.]+)").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
@@ -376,7 +373,7 @@ _INVERTER_PROFILES_LIST = [
     ),
     # STAR
     # STAR-H3-12.0-E: H3-12.0-E
-    # (presumably there are other sizes also).
+    # (presumably there are other sizes also)
     InverterModelProfile(InverterModel.STAR_H3, r"^STAR-H3-([\d\.]+)").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
@@ -384,7 +381,7 @@ _INVERTER_PROFILES_LIST = [
         special_registers=H3_REGISTERS,
     ),
     # Solavita SP
-    # These have the form 'SP R8KH3', 'R10KH3', 'R12KH3', but the number doesn't map to a power.
+    # These have the form 'SP R8KH3', 'R10KH3', 'R12KH3', but the number doesn't map to a power
     # https://www.svcenergy.com/product/three-phase-solar-power-hybrid-inverter-sih
     InverterModelProfile(
         InverterModel.SOLAVITA_SP,
@@ -404,7 +401,7 @@ _INVERTER_PROFILES_LIST = [
         special_registers=H3_REGISTERS,
     ),
     # a-TroniX AX
-    # These have the form 'AX 12.0kW-3ph' (the 3ph standing for '3 phase'). Presumably there are other powers, too.
+    # These have the form 'AX 12.0kW-3ph' (the 3ph standing for '3 phase'). Presumably there are other powers, too
     # See https://github.com/nathanmarlor/foxess_modbus/discussions/783
     InverterModelProfile(InverterModel.ATRONIX_AX, r"^AX ([\d\.]+)kW-3ph").add_connection_type(
         ConnectionType.AUX,
@@ -412,7 +409,7 @@ _INVERTER_PROFILES_LIST = [
         versions={None: Inv.H3_PRE180},
         special_registers=H3_REGISTERS,
     ),
-    # Example: H3-Pro-20.0
+    # E.g. H3-Pro-20.0
     InverterModelProfile(InverterModel.H3_PRO, r"^H3-Pro-([\d\.]+)").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
@@ -420,7 +417,7 @@ _INVERTER_PROFILES_LIST = [
         special_registers=H3_REGISTERS,
     ),
     # Enpal I-X range
-    # These have the form 'I-X5', with powers 5, 6, 8, 9.9, 10, 12, 15kW.
+    # These have the form 'I-X5', with powers 5, 6, 8, 9.9, 10, 12, 15kW
     # See https://github.com/nathanmarlor/foxess_modbus/issues/785
     InverterModelProfile(InverterModel.ENPAL_IX, r"^I-X([\d\.]+)").add_connection_type(
         ConnectionType.AUX,
@@ -429,7 +426,7 @@ _INVERTER_PROFILES_LIST = [
         special_registers=H3_SMART_REGISTERS,
     ),
     # 1KzMMA5 range
-    # These have the form '1K5-HI-15-V1', with powers 5, 8, 10, 12, 15kW.
+    # These have the form '1K5-HI-15-V1', with powers 5, 8, 10, 12, 15kW
     # See https://github.com/nathanmarlor/foxess_modbus/issues/807
     InverterModelProfile(InverterModel.ONE_KOMMA_FIVE, r"^1K5-HI-(\d+)-V1").add_connection_type(
         ConnectionType.AUX,
@@ -460,7 +457,7 @@ def inverter_connection_type_profile_from_config(inverter_config: dict[str, Any]
     model_profile = INVERTER_PROFILES[inverter_model]
 
     connection_type_profile = model_profile.connection_types.get(connection_type, None)
-    # Some models support AUX and LAN identically, and we only list AUX in the profiles. In this case, try AUX.
+    # Some models support AUX and LAN identically, and we only list AUX in the profiles. In this case, try AUX
     if connection_type_profile is None and connection_type != ConnectionType.AUX:
         connection_type_profile = model_profile.connection_types.get(ConnectionType.AUX, None)
 
