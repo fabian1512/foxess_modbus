@@ -145,7 +145,8 @@ class ModbusController(EntityController, UnloadController):
             self.inverter_details[INVERTER_MODEL]
         )
 
-        # Setze das Inv-Flag korrekt
+        # Used for H3-smart. Please test if this also fits other models
+        # Set the Inv flag correctly
         version_from_config = self._inverter_details.get("inverter_version")
         inverter_version = None
         if version_from_config is not None:
@@ -158,7 +159,8 @@ class ModbusController(EntityController, UnloadController):
             self.inverter_details.get(INVERTER_MODEL, "<unbekannt>"),
             self._inv,
         )
-
+        # end H3-smart
+        
         # Setup mixins
         EntityController.__init__(self)
         UnloadController.__init__(self)
@@ -440,23 +442,47 @@ class ModbusController(EntityController, UnloadController):
 
         :returns: Sequence of tuples of (start_address, num_registers_to_read)
         """
+
+
+        # The idea here is that read operations are expensive (there seems to be a large round-trip time at least
+        # with the W610), but reading additional unneeded registers is relatively cheap (probably < 1ms).
+
+        # To give some intuition, here are some examples of the groupings we want to achieve, assuming max_read = 5
+        # 1,2 / 4,5 -> 1,2,3,4,5 (i.e. to read the registers 1, 2, 4 and 5, we'll do a single read spanning 1-5)
+        # 1,2 / 5,6,7,8 -> 1,2 / 5,6,7,8
+        # 1,2 / 5,6,7,8,9 -> 1,2 / 5,6,7,8,9
+        # 1,2 / 5,6,7,8,9,10 -> 1,2,3,4,5 / 6,7,8,9,10
+        # 1,2,3 / 5,6,7 / 9,10 -> 1,2,3,4,5 / 6,7,8,9,10
+
+        # The problem as a whole looks like it's NP-hard (although I can't find a name for it).
+        # We're therefore going to use a fairly simple algorithm which just makes each read as large as it can be.
+
+        #Was used to find the error why the h3-smart is not recognized
         _LOGGER.debug(
             "[foxess_modbus] _create_read_ranges: Modell=%s Inv=%s, ConnectionTypeProfile=%s, "
             "max_read=%s, is_initial_connection=%s",
-            self.inverter_details.get(INVERTER_MODEL, "<unbekannt>"),
-            getattr(self, "_inv", "<unbekannt>"),
-            getattr(self, "_connection_type_profile", "<unbekannt>"),
+            self.inverter_details.get(INVERTER_MODEL, "<unknown>"),
+            getattr(self, "_inv", "<unknown>"),
+            getattr(self, "_connection_type_profile", "<unknown>"),
             max_read,
             is_initial_connection,
         )
+        # end
+        
         start_address: int | None = None
         read_size = 0
-        planned_reads = []  # Debug: Sammle geplante Reads
+        # TODO: Do we want to cache the result of this?
+        planned_reads = [] # Debug: Sammle geplante Reads
         for address, register_value in sorted(self._data.items()):
             if register_value.poll_type == RegisterPollType.ON_CONNECTION and not is_initial_connection:
                 continue
+
+            # Have we found that we can't read this register? Don't try again.
             if address in self._detected_invalid_ranges:
                 continue
+
+            # This register must be read in a single individual read. Yield any ranges we've found so far,
+            # and yield just this register on its own
             if self._connection_type_profile.is_individual_read(address):
                 if start_address is not None:
                     planned_reads.append((start_address, read_size))
@@ -483,7 +509,7 @@ class ModbusController(EntityController, UnloadController):
             planned_reads.append((start_address, read_size))
             yield (start_address, read_size)
         _LOGGER.debug(
-            "[foxess_modbus] Geplante Register-Reads: %s",
+            "[foxess_modbus] Planned register readings: %s",
             planned_reads,
         )
 
@@ -654,7 +680,7 @@ class ModbusController(EntityController, UnloadController):
                     capacity = model.inverter_capacity(full_model)
                     _LOGGER.info("Autodetected inverter as '%s' (%s, %sW)", model.model, full_model, capacity)
                     _LOGGER.debug(
-                        "[foxess_modbus] Autodetect: Modell erkannt: %s, Pattern: %s, FullModel: %s",
+                        "[foxess_modbus] Autodetect: Model recognized: %s, Pattern: %s, FullModel: %s",
                         model.model,
                         model.model_pattern,
                         full_model,
