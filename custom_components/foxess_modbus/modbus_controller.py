@@ -492,6 +492,9 @@ class ModbusController(EntityController, UnloadController):
                 yield (address, 1)
             elif start_address is None:
                 start_address, read_size = address, 1
+            # If we're just increasing the previous read size by 1, then don't test whether we're extending
+            # the read over an invalid range (as we assume that registers we're reading to read won't be
+            # inside invalid ranges, tested in __init__). This also assumes that read_size != max_read here.
             elif address == start_address + 1 or (
                 address <= start_address + max_read - 1
                 and not self._connection_type_profile.overlaps_invalid_range(start_address, address - 1)
