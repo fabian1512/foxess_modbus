@@ -501,10 +501,12 @@ class ModbusController(EntityController, UnloadController):
             ):
                 read_size = address - start_address + 1
             else:
+                # There's a previous read, and we can't extend it to cover this address
                 planned_reads.append((start_address, read_size))
                 yield (start_address, read_size)
                 start_address, read_size = address, 1
             if read_size == max_read:
+                # (can't get here if start_address is None, as read_size would be 0
                 planned_reads.append((start_address, read_size))
                 yield (start_address, read_size)  # type: ignore
                 start_address, read_size = None, 0
