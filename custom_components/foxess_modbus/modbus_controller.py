@@ -499,6 +499,7 @@ class ModbusController(EntityController, UnloadController):
                 address <= start_address + max_read - 1
                 and not self._connection_type_profile.overlaps_invalid_range(start_address, address - 1)
             ):
+                # There's a previous read which we can extend
                 read_size = address - start_address + 1
             else:
                 # There's a previous read, and we can't extend it to cover this address
