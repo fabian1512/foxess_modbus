@@ -91,8 +91,8 @@ REMOTE_CONTROL_DESCRIPTION = ModbusRemoteControlFactory(
             models=Inv.KH_PRE133 | Inv.KH_133,
         ),
         RemoteControlAddressSpec(
-            # The H3 doesn't support anything above 44005, und die active/reactive power regisers sind 2 Werte
-            # The Kuara H3 doesn't support this, siehe https://github.com/nathanmarlor/foxess_modbus/issues/532
+            # The H3 doesn't support anything above 44005, and the active/reactive power regisers are 2 values
+            # The Kuara H3 doesn't support this, see https://github.com/nathanmarlor/foxess_modbus/issues/532
             holding=ModbusRemoteControlAddressConfig(
                 remote_enable=44000,
                 timeout_set=44001,
