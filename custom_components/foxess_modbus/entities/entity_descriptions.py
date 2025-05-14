@@ -749,7 +749,35 @@ def _h1_current_voltage_power_entities() -> Iterable[EntityFactory]:
         ],
         scale=-0.001,
     )
+    def _ct2_meter(addresses: list[ModbusAddressesSpec], scale: float) -> ModbusSensorDescription:
+        return ModbusSensorDescription(
+            key="ct2_meter",
+            addresses=addresses,
+            name="CT2 Meter",
+            device_class=SensorDeviceClass.POWER,
+            state_class=SensorStateClass.MEASUREMENT,
+            native_unit_of_measurement="kW",
+            icon="mdi:meter-electric-outline",
+            scale=scale,
+            round_to=0.01,
+            validate=[Range(-100, 100)],
+        )
 
+    yield _ct2_meter(
+        addresses=[
+            ModbusAddressesSpec(input=[11022], models=Inv.H1_G1),
+            ModbusAddressesSpec(holding=[31015], models=Inv.H1_G1 | Inv.H1_LAN | Inv.H1_G2_SET),
+        ],
+        scale=0.001,
+    )
+    yield _ct2_meter(
+        addresses=[
+            ModbusAddressesSpec(input=[11022], models=Inv.KH_PRE119),
+            ModbusAddressesSpec(holding=[31052, 31051], models=Inv.KH_PRE133),
+            ModbusAddressesSpec(holding=[31015], models=Inv.KH_133),
+        ],
+        scale=-0.001,
+    )
 
 def _h3_current_voltage_power_entities() -> Iterable[EntityFactory]:
     def _grid_voltage(phase: str, addresses: list[ModbusAddressesSpec]) -> EntityFactory:
