@@ -325,7 +325,7 @@ _INVERTER_PROFILES_LIST = [
         versions={Version(1, 33): Inv.KH_PRE133, None: Inv.KH_133},
         special_registers=KH_REGISTERS,
     ),
-    # H3-Smart: explicit profile for H3-Smart to assign the registers correctly
+    # H3-Smart: explizites Profil für H3-Smart, damit die Register korrekt zugeordnet werden
     InverterModelProfile(InverterModel.H3_SMART, r"^H3-([\d\.]+)-Smart").add_connection_type(
         ConnectionType.AUX,
         RegisterType.HOLDING,
