@@ -56,7 +56,9 @@ def _h3_charge_period_factory(
                     max_soc_global_address=46620,
                     min_soc_global_address=46611,
                 ),
-                models=Inv.H3_SMART,  # H3 Pro unconfirmed (480xx not exposed on all firmware), EVO pending tests
+                # H3 Pro unconfirmed (480xx not exposed on all firmware); EVO uses the same layout
+                # (enable/start/end/mode at 48010..48013) and full-block writes, see PR #1134.
+                models=Inv.H3_SMART | Inv.EVO,
             ),
         ],
         period_start_key=period_start_key,
@@ -88,7 +90,7 @@ CHARGE_PERIODS = [
                     period_end_address=41003,
                     enable_charge_from_grid_address=41001,
                 ),
-                models=Inv.H1_G2_SET | Inv.EVO,
+                models=Inv.H1_G2_SET,
             ),
         ],
         period_start_key="time_period_1_start",
@@ -116,7 +118,7 @@ CHARGE_PERIODS = [
                     period_end_address=41006,
                     enable_charge_from_grid_address=41004,
                 ),
-                models=Inv.H1_G2_SET | Inv.EVO,
+                models=Inv.H1_G2_SET,
             ),
         ],
         period_start_key="time_period_2_start",
