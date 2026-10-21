@@ -43,7 +43,8 @@ class ModbusChargePeriodAddressConfig:
     fdpwr_address: int | None = None
     enable_flag_address: int | None = None
     # The global Max SoC / Min SoC OnGrid registers which the time-period system mirrors into the group's
-    # SoC bounds (offset +4). These are the GUI-editable values (e.g. 46610 / 46611 on the H3 Smart/H3 Pro).
+    # SoC bounds (offset +4). These are the GUI-editable values (e.g. 46620 / 46611 on the H3 Smart).
+    # 46620 ("Maximum SoC From Grid") is the documented +4 high byte; 46610 ("Maximum SoC") is not.
     max_soc_global_address: int | None = None
     min_soc_global_address: int | None = None
 

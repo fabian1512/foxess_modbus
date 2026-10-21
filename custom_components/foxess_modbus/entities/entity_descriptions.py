@@ -2736,6 +2736,19 @@ def _configuration_entities() -> Iterable[EntityFactory]:
         validate=[Range(0, 100)],
     )
 
+    # Maximum SoC From Grid. Only exposed as a sensor: the time-group charge periods mirror it into the
+    # group's SoC bounds (offset +4), and the charge-period writer needs it available in the polled data.
+    yield ModbusSensorDescription(
+        key="max_soc_from_grid",
+        addresses=[ModbusAddressesSpec(holding=[46620], models=Inv.H3_SMART)],
+        name="Max SoC From Grid",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="%",
+        icon="mdi:battery-arrow-up-outline",
+        validate=[Range(0, 100)],
+    )
+
     # Sensor kept for back compat
     yield ModbusSensorDescription(
         key="min_soc_on_grid",

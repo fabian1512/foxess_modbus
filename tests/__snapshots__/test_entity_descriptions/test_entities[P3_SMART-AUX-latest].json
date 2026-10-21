@@ -1143,6 +1143,16 @@
   },
   {
     "addresses": [
+      46620
+    ],
+    "key": "max_soc_from_grid",
+    "name": "Max SoC From Grid",
+    "scale": null,
+    "signed": true,
+    "type": "sensor"
+  },
+  {
+    "addresses": [
       46609
     ],
     "key": "min_soc",

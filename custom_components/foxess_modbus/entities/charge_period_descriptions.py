@@ -52,10 +52,11 @@ def _h3_charge_period_factory(
                     enable_flag_address=base + 9,
                     # The global Max SoC / Min SoC OnGrid registers are mirrored into the group's SoC
                     # bounds (offset +4), matching how the FoxESS app configures a charge period.
-                    max_soc_global_address=46610,
+                    # +4's high byte is MaxSoC From Grid (46620), its low byte MinSoC OnGrid (46611).
+                    max_soc_global_address=46620,
                     min_soc_global_address=46611,
                 ),
-                models=Inv.H3_PRO_SET | Inv.H3_SMART,
+                models=Inv.H3_SMART,  # H3 Pro unconfirmed (480xx not exposed on all firmware), EVO pending tests
             ),
         ],
         period_start_key=period_start_key,

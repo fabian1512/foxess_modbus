@@ -22,6 +22,10 @@ from .utils import get_controller_from_friendly_name_or_device_id
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
 
+# Global "Time Period Mode" (a.k.a. the inverter's "Timer"/"Modus Terminierer") flag. The full 10-register
+# block starting here has to be written for some inverters - see _make_time_mode_flag_block.
+_TIME_MODE_FLAG_ADDRESS = 48000
+
 
 def _integer(value: Any) -> int:
     """Validate and coerce a boolean value."""
@@ -244,25 +248,7 @@ async def _set_charge_periods(controller: ModbusController, charge_periods: list
     # (One charge period can contain another, or starts/ends can overlap).
     # Mirror this for consistancy, even though it is a little odd.
 
-    # Inverters which use the time-group charge period system (e.g. the H3 Smart) only run their time
-    # periods when the Time Period System is enabled (register 48000 = 1, the inverter's "Timer"/"Modus
-    # Terminierer" mode). Following the H1 semantics of an additive charge-period window, we tie this to
-    # whether any charge period is enabled: if any is enabled the time period system is switched on, and
-    # when all of them are disabled it is switched off again, so that the inverter returns to its normal
-    # (e.g. "Self Use") mode, just like the H1 does.
-    writes = []
-    is_time_group = False
-    for charge_period, config in zip(charge_periods, controller.charge_periods, strict=True):
-        if config.addresses.enable_address is not None:
-            is_time_group = True
-        writes.extend(_make_charge_period_writes(config.addresses, controller, charge_period))
-
-    # Don't write the Time Period Mode flag (48000) from every enabled period: it's a single global register.
-    if is_time_group:
-        any_enabled = any(cp.enable_force_charge for cp in charge_periods)
-        writes.append((48000, 1 if any_enabled else 0))
-
-    write_blocks = _split_into_contiguous_runs(writes)
+    write_blocks = _build_write_blocks(controller, charge_periods)
 
     for write_start_address, write_values in write_blocks:
         try:
@@ -272,15 +258,52 @@ async def _set_charge_periods(controller: ModbusController, charge_periods: list
             raise HomeAssistantError() from ex
 
 
+def _build_write_blocks(
+    controller: ModbusController,
+    charge_periods: list[ChargePeriod],
+) -> list[tuple[int, list[int]]]:
+    """Builds the register blocks to write, each as (start address, values).
+
+    Inverters which use the time-group charge period system (e.g. the H3 Smart and the EVO) only run their
+    time periods when the Time Period System is enabled (register 48000 = 1, the inverter's "Timer"/"Modus
+    Terminierer" mode). Following the H1 semantics of an additive charge-period window, we tie this to
+    whether any charge period is enabled: if any is enabled the time period system is switched on, and when
+    all of them are disabled it is switched off again, so that the inverter returns to its normal (e.g.
+    "Self Use") mode, just like the H1 does.
+
+    Time-group inverters are always written as complete 10-register blocks. Some inverters (e.g. the EVO)
+    reject single-register writes and partial group writes with an IllegalAddress exception; they only
+    accept a full block write (see FoxESS Modbus protocol, Table 3-11, and its note that each block of
+    contiguous registers can be read and written simultaneously).
+    """
+
+    write_blocks: list[tuple[int, list[int]]] = []
+    is_time_group = False
+
+    for charge_period, config in zip(charge_periods, controller.charge_periods, strict=True):
+        if config.addresses.enable_address is not None:
+            is_time_group = True
+            write_blocks.append(_make_time_group_block(config.addresses, controller, charge_period))
+        else:
+            write_blocks.extend(
+                _split_into_contiguous_runs(_make_charge_period_writes(config.addresses, charge_period))
+            )
+
+    # The Time Period Mode flag (48000) is a single global setting, so it's written once, and after the
+    # groups have been configured. It's written as part of its full 48000-48009 block, because some inverters
+    # reject a single-register write to 48000.
+    if is_time_group:
+        any_enabled = any(cp.enable_force_charge for cp in charge_periods)
+        write_blocks.append(_make_time_mode_flag_block(any_enabled))
+
+    return write_blocks
+
+
 def _make_charge_period_writes(
     config: ModbusChargePeriodAddressConfig,
-    controller: ModbusController,
     charge_period: ChargePeriod,
 ) -> list[tuple[int, int]]:
-    """Builds the (address, value) register writes for a single charge period."""
-
-    if config.enable_address is not None:
-        return _make_time_group_writes(config, controller, charge_period)
+    """Builds the (address, value) register writes for a single charge period (non time-group inverters)."""
 
     return [
         (
@@ -298,27 +321,25 @@ def _make_charge_period_writes(
     ]
 
 
-def _make_time_group_writes(
+def _make_time_group_block(
     config: ModbusChargePeriodAddressConfig,
     controller: ModbusController,
     charge_period: ChargePeriod,
-) -> list[tuple[int, int]]:
-    """Builds the register writes for an inverter which uses the time-group charge period system (e.g. H3 Smart).
+) -> tuple[int, list[int]]:
+    """Builds the complete 10-register block for an inverter which uses the time-group charge period system.
 
     A time group is a contiguous block of 10 registers (see FoxESS Modbus protocol, Table 3-11). When a
     charge period is enabled, the group is activated in Force Charge mode (Work Mode 6). "Charge from grid"
     simply controls the force-charge power (FDPWR): enabled charges from the grid at the inverter's full
     capacity, disabled charges from PV only (FDPWR = 0).
 
-    When a charge period is disabled, the group is turned off and the force-charge power is cleared, so that
-    the "charge from grid" state doesn't linger as on. The previously configured times are left intact.
+    When a charge period is disabled, the group is switched off and the force-charge power is cleared, so that
+    the "charge from grid" state doesn't linger as on. The previously configured times, work mode and SoC
+    bounds are left intact.
     """
 
     base = config.enable_address
     assert base is not None
-
-    if not charge_period.enable_force_charge:
-        return [(base, 0), (base + 6, 0)]
 
     # The charge-period card doesn't expose a charge power or SoC target, so we take the configured SoC
     # bounds from the inverter's global Max SoC / Min SoC OnGrid registers (mirrored into the group's
@@ -326,20 +347,61 @@ def _make_time_group_writes(
     # capacity if 'charge from grid' is enabled (otherwise PV only).
     max_soc = _read_soc_value(controller, config.max_soc_global_address, 100)
     min_soc = _read_soc_value(controller, config.min_soc_global_address, 10)
-    fdpwr = controller.inverter_capacity if charge_period.enable_charge_from_grid else 0
 
-    return [
-        (base, 1),  # +0: Time group enable
-        (base + 1, serialize_time_to_value(charge_period.start)),  # +1: Start time (high byte=hour, low=min)
-        (base + 2, serialize_time_to_value(charge_period.end)),  # +2: End time (high byte=hour, low=min)
-        (base + 3, 6),  # +3: Work mode = Force Charge
-        (base + 4, (max_soc << 8) | min_soc),  # +4: MaxSoC (high byte) | MinSoC (low byte)
-        (base + 5, max_soc),  # +5: FCSOC/FDSOC (force charge SoC target = MaxSoC, like the app)
-        (base + 6, fdpwr),  # +6: FDPWR (force charge power, W)
-        (base + 7, 0),  # +7: reserve
-        (base + 8, 0),  # +8: reserve
-        (base + 9, 1),  # +9: enable flag (undocumented, but required for force charge)
-    ]
+    if charge_period.enable_force_charge:
+        start = serialize_time_to_value(charge_period.start)
+        end = serialize_time_to_value(charge_period.end)
+        work_mode = 6  # Force Charge
+        fdpwr = controller.inverter_capacity if charge_period.enable_charge_from_grid else 0
+        enable = 1
+    else:
+        # Preserve the configured times/work mode, but switch the group off and clear the force-charge power.
+        # The work mode register isn't polled (no entity), so it can't be read from the cache: default to
+        # Force Charge, which is what the FoxESS app stores for a charge period anyway.
+        start = _read_register_value(controller, base + 1, 0)
+        end = _read_register_value(controller, base + 2, 0)
+        work_mode = _read_register_value(controller, base + 3, 6)
+        fdpwr = 0
+        enable = 0
+
+    # Register +9 is not a boolean flag: on real hardware it holds the group number (group 1 = 1,
+    # group 2 = 2, ...), matching what the FoxESS app writes. Derive it from the block base.
+    group_index = (base - _TIME_MODE_FLAG_ADDRESS) // 10
+
+    return (
+        base,
+        [
+            enable,  # +0: Time group enable
+            start,  # +1: Start time (high byte=hour, low byte=minute)
+            end,  # +2: End time (high byte=hour, low byte=minute)
+            work_mode,  # +3: Work mode (6 = Force Charge)
+            (max_soc << 8) | min_soc,  # +4: MaxSoC (high byte) | MinSoC (low byte)
+            max_soc,  # +5: FCSOC/FDSOC (force charge SoC target = MaxSoC, like the app)
+            fdpwr,  # +6: FDPWR (force charge power, W)
+            0,  # +7: reserve
+            0,  # +8: reserve
+            group_index,  # +9: group number (1 for group 1, 2 for group 2, ...)
+        ],
+    )
+
+
+def _make_time_mode_flag_block(enabled: bool) -> tuple[int, list[int]]:
+    """Builds the full 48000-48009 block holding the global Time Period Mode flag.
+
+    Some inverters (e.g. the EVO) reject a single-register write to 48000 with an IllegalAddress exception;
+    they only accept the complete 10-register block write. The remaining registers in the block are reserved.
+    """
+
+    return (_TIME_MODE_FLAG_ADDRESS, [1 if enabled else 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+
+def _read_register_value(controller: ModbusController, address: int, default: int) -> int:
+    """Reads a register, returning `default` if it isn't available or isn't a valid unsigned 16-bit value."""
+
+    value = controller.read(address, signed=False)
+    if value is None or not 0 <= value <= 0xFFFF:
+        return default
+    return value
 
 
 def _read_soc_value(controller: ModbusController, address: int | None, default: int) -> int:
