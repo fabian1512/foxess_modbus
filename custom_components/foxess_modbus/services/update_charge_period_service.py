@@ -355,9 +355,10 @@ def _make_time_group_block(
         fdpwr = controller.inverter_capacity if charge_period.enable_charge_from_grid else 0
         enable = 1
     else:
-        # Preserve the configured times/work mode, but switch the group off and clear the force-charge power.
-        # The work mode register isn't polled (no entity), so it can't be read from the cache: default to
-        # Force Charge, which is what the FoxESS app stores for a charge period anyway.
+        # Preserve the configured times, but switch the group off and clear the force-charge power.
+        # The work mode register isn't polled (no entity), so it can't be read from the cache and is always
+        # written as Force Charge (6), which is what the FoxESS app stores for a charge period anyway. A group
+        # which was set to a different work mode elsewhere will therefore be reset to Force Charge.
         start = _read_register_value(controller, base + 1, 0)
         end = _read_register_value(controller, base + 2, 0)
         work_mode = _read_register_value(controller, base + 3, 6)

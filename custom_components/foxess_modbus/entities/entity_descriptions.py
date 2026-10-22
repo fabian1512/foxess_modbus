@@ -2738,6 +2738,8 @@ def _configuration_entities() -> Iterable[EntityFactory]:
 
     # Maximum SoC From Grid. Only exposed as a sensor: the time-group charge periods mirror it into the
     # group's SoC bounds (offset +4), and the charge-period writer needs it available in the polled data.
+    # It is only polled on H3 Smart; on other time-group inverters (e.g. the EVO) the charge-period writer
+    # falls back to a Max SoC of 100.
     yield ModbusSensorDescription(
         key="max_soc_from_grid",
         addresses=[ModbusAddressesSpec(holding=[46620], models=Inv.H3_SMART)],
